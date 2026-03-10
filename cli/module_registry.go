@@ -96,10 +96,9 @@ type manifestBuildInfo struct {
 
 // defaultBuildInfo has defaults for unset fields in "build".
 var defaultBuildInfo = manifestBuildInfo{
-	Build:  "make module.tar.gz",
-	Path:   "module.tar.gz",
-	Arch:   []string{"linux/amd64", "linux/arm64"},
-	Distro: "bullseye",
+	Build: "make module.tar.gz",
+	Path:  "module.tar.gz",
+	Arch:  []string{"linux/amd64", "linux/arm64"},
 }
 
 // ModuleManifest is used to create & parse manifest.json.
