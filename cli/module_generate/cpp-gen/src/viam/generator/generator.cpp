@@ -270,7 +270,7 @@ void Generator::main_fn(llvm::raw_ostream& moduleFile) {
                << llvm::formatv(
                       R"--(
     std::shared_ptr<ModelRegistration> mr = std::make_shared<ModelRegistration>(
-        API::get<{viam::sdk::0}>,
+        API::get<viam::sdk::{0}>(),
         model,
         [](viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg) {
             return std::make_unique<{1}>(deps, cfg);
