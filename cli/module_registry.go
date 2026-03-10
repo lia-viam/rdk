@@ -90,7 +90,7 @@ type manifestBuildInfo struct {
 	Setup      string   `json:"setup"`
 	Path       string   `json:"path"`
 	Arch       []string `json:"arch"`
-	Distro     string   `json:"distro"`
+	Distro     string   `json:"distro,omitempty"`
 	DarwinDeps []string `json:"darwin_deps,omitempty"`
 }
 
