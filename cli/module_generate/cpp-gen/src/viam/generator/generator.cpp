@@ -319,6 +319,56 @@ target_link_libraries(${0}
                              fmt_str::moduleName);
 }
 
+void Generator::conanfile(llvm::raw_ostream& outFile) {
+    outFile << llvm::formatv(R"--(
+from conan import ConanFile
+from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
+
+class {0}Recipe(ConanFile):
+    name = "{0}"
+    version = "0.1"
+    package_type = "application"
+
+    # Optional metadata
+    license = "<Put the package license here>"
+    author = "<Put your name here> <And your email here>"
+    url = "<Package recipe repository url here, for issues about the package>"
+    description = "<Description of mysensor package here>"
+    topics = ("<Put some tag here>", "<here>", "<and here>")
+
+    # Binary configuration
+    settings = "os", "compiler", "build_type", "arch"
+
+    # Sources are located in the same place as this recipe, copy them to the recipe
+    exports_sources = "CMakeLists.txt", "src/*"
+
+    def layout(self):
+        cmake_layout(self)
+
+    def configure(self):
+        self.options["viam-cpp-sdk"].shared = False
+
+    def generate(self):
+        deps = CMakeDeps(self)
+        deps.generate()
+        tc = CMakeToolchain(self)
+        tc.generate()
+
+    def build(self):
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
+
+    def package(self):
+        cmake = CMake(self)
+        cmake.install()
+
+    def requirements(self):
+        self.requires("viam-cpp-sdk/0.31.0")
+)--",
+                             fmt_str::moduleName);
+}
+
 std::string Generator::resourceToSource(llvm::StringRef resourceSubtype,
                                         Generator::ResourceType resourceType,
                                         Generator::SrcType srcType) {

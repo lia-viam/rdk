@@ -34,6 +34,11 @@ static llvm::cl::opt<bool> justCMake(
     llvm::cl::desc("If true, output the template CMakeLists.txt and exit"),
     llvm::cl::cat(quickExit));
 
+static llvm::cl::opt<bool> justConan(
+    "conan",
+    llvm::cl::desc("If true, output the template conanfile and exit"),
+    llvm::cl::cat(quickExit));
+
 int main(int argc, const char** argv) try {
     cl::ParseCommandLineOptions(argc, argv);
 
@@ -52,6 +57,11 @@ int main(int argc, const char** argv) try {
 
     if (justCMake) {
         Generator::cmakelists(out);
+        return 0;
+    }
+
+    if (justConan) {
+        Generator::conanfile(out);
         return 0;
     }
 

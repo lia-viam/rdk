@@ -36,6 +36,8 @@ class Generator {
 
     static void cmakelists(llvm::raw_ostream& outFile);
 
+    static void conanfile(llvm::raw_ostream& outFile);
+
     int run();
 
    private:
