@@ -104,7 +104,6 @@ func (c *viamClient) moduleBuildStartForRepo(
 		Workdir:       &workdir,
 		Distro:        &manifest.Build.Distro,
 	}
-
 	res, err := c.buildClient.StartBuild(c.c.Context, &req)
 	if err != nil {
 		return "", err
