@@ -309,9 +309,9 @@ find_package(Threads REQUIRED)
 
 find_package(viam-cpp-sdk CONFIG REQUIRED COMPONENTS viamsdk)
 
-add_executable(${0} src/main.cpp)
+add_executable({0} src/main.cpp)
 
-target_link_libraries(${0}
+target_link_libraries({0}
     viam-cpp-sdk::viamsdk
 )
 
