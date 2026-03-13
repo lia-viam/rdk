@@ -1,6 +1,6 @@
 namespace viam::gen::fmt_str {
 
-constexpr auto orgID = "{{ .orgID }}";
+constexpr auto orgID = "{{ .OrgID }}";
 
 constexpr auto moduleName = "{{ .ModuleName }}";
 
