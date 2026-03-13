@@ -122,18 +122,10 @@ public:
 template <>
 const char* Generator::include_fmt<Generator::ResourceType::component>() {
     constexpr const char* fmt = R"--(
-#include <iostream>
-#include <memory>
-#include <vector>
-
-#include <viam/sdk/common/exception.hpp>
-#include <viam/sdk/common/instance.hpp>
 #include <viam/sdk/common/proto_value.hpp>
 #include <viam/sdk/{0}>
 #include <viam/sdk/config/resource.hpp>
-#include <viam/sdk/log/logging.hpp>
 #include <viam/sdk/module/service.hpp>
-#include <viam/sdk/registry/registry.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
 
     )--";
@@ -144,17 +136,9 @@ const char* Generator::include_fmt<Generator::ResourceType::component>() {
 template <>
 const char* Generator::include_fmt<Generator::ResourceType::service>() {
     constexpr const char* fmt = R"--(
-#include <iostream>
-#include <memory>
-#include <vector>
-
-#include <viam/sdk/common/exception.hpp>
-#include <viam/sdk/common/instance.hpp>
 #include <viam/sdk/common/proto_value.hpp>
 #include <viam/sdk/config/resource.hpp>
-#include <viam/sdk/log/logging.hpp>
 #include <viam/sdk/module/service.hpp>
-#include <viam/sdk/registry/registry.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
 #include <viam/sdk/{0}>
     )--";
@@ -253,7 +237,24 @@ int Generator::do_stubs() {
 }
 
 void Generator::main_fn(llvm::raw_ostream& moduleFile) {
-    moduleFile << "int main(int argc, char** argv) try {\n"
+    moduleFile <<
+
+        llvm::formatv(R"--(
+#include "{0}.hpp"
+
+#include <iostream>
+#include <memory>
+#include <vector>
+
+#include <viam/sdk/common/exception.hpp>
+#include <viam/sdk/common/instance.hpp>
+#include <viam/sdk/log/logging.hpp>
+#include <viam/sdk/registry/registry.hpp>
+
+
+)--",
+                      fmt_str::modelSnake)
+               << "int main(int argc, char** argv) try {\n"
                << llvm::formatv(R"--(
     // Every Viam C++ SDK program must have one and only one Instance object which is created before
     // any other SDK objects and stays alive until all of them are destroyed.
@@ -262,15 +263,15 @@ void Generator::main_fn(llvm::raw_ostream& moduleFile) {
     // Write general log statements using the VIAM_SDK_LOG macro.
     VIAM_SDK_LOG(info) << "Starting up {1} module";
 
-    Model model("{0}", "{1}", "{2}");)--",
+    viam::sdk::Model model("{0}", "{1}", "{2}");)--",
                                 fmt_str::orgID,
                                 fmt_str::moduleName,
                                 fmt_str::modelSnake)
                << "\n\n"
                << llvm::formatv(
                       R"--(
-    std::shared_ptr<ModelRegistration> mr = std::make_shared<ModelRegistration>(
-        API::get<viam::sdk::{0}>(),
+    auto mr = std::make_shared<viam::sdk::ModelRegistration>(
+        viam::sdk::API::get<viam::sdk::{0}>(),
         model,
         [](viam::sdk::Dependencies deps, viam::sdk::ResourceConfig cfg) {
             return std::make_unique<{1}>(deps, cfg);
@@ -282,8 +283,8 @@ void Generator::main_fn(llvm::raw_ostream& moduleFile) {
                << "\n\n"
                <<
         R"--(
-    std::vector<std::shared_ptr<ModelRegistration>> mrs = {mr};
-    auto my_mod = std::make_shared<ModuleService>(argc, argv, mrs);
+    std::vector<std::shared_ptr<viam::sdk::ModelRegistration>> mrs = {mr};
+    auto my_mod = std::make_shared<viam::sdk::ModuleService>(argc, argv, mrs);
     my_mod->serve();
 
     return EXIT_SUCCESS;
@@ -309,14 +310,20 @@ find_package(Threads REQUIRED)
 
 find_package(viam-cpp-sdk CONFIG REQUIRED COMPONENTS viamsdk)
 
-add_executable({0} src/main.cpp)
+add_executable({0}
+    src/main.cpp
+    src/{1}.cpp
+)
+
+target_include_directories({0} src)
 
 target_link_libraries({0}
     viam-cpp-sdk::viamsdk
 )
 
 )--",
-                             fmt_str::moduleName);
+                             fmt_str::moduleName,
+                             fmt_str::modelSnake);
 }
 
 void Generator::conanfile(llvm::raw_ostream& outFile) {
