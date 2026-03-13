@@ -120,7 +120,7 @@ namespace {1} {
 
     const char* ctorFmt = R"--(
 {0}::{0}(const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
-    : {1}(cfg.name()) {
+    : {1}(cfg.name()) {{
     this->reconfigure(deps, cfg);
 }
 
@@ -128,11 +128,11 @@ namespace {1} {
     *srcOut_ << llvm::formatv(ctorFmt, fmt_str::modelPascal, resourceSubtypePascal_);
 
     llvm::formatv(R"--(
-std::vector<std::string> {0}::validate(const viam::sdk::ResourceConfig& cfg) {
+std::vector<std::string> {0}::validate(const viam::sdk::ResourceConfig& cfg) {{
     throw std::runtime_error("\"validate\" not implemented");
 }
 
-void {0}::reconfigure(const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg) {
+void {0}::reconfigure(const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg) {{
     throw std::runtime_error("\"reconfigure\" not implemented");
 }
 
