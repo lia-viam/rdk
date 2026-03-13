@@ -188,6 +188,9 @@ void Generator::do_stubs() {
     DeclarationMatcher methodMatcher =
         cxxMethodDecl(isPure(), hasParent(cxxRecordDecl(hasName(qualName)))).bind("method");
 
+    DeclarationMatcher stoppableMatcher =
+        cxxRecordDecl(hasName(qualName), isDerivedFrom("viam::sdk::Stoppable")).bind("stoppable");
+
     struct MethodPrinter : MatchFinder::MatchCallback {
         MethodPrinter(llvm::raw_ostream& headerOut_, llvm::raw_ostream& srcOut_)
             : headerOut(headerOut_), srcOut(srcOut_) {}
@@ -265,6 +268,20 @@ void Generator::do_stubs() {
 
                 do_header_declaration(method, printPolicy, retType);
                 do_src_definition(method, printPolicy, retType);
+
+                return;
+            }
+
+            if (result.Nodes.getNodeAs<clang::CXXRecordDecl>("stoppable")) {
+                // it's friday afternoon and i am writing this out manually rather than with my
+                // method printing helpers
+
+                headerOut << "    void stop(const viam::sdk::ProtoStruct & extra) override;\n\n";
+
+                srcOut << "void " << fmt_str::modelPascal
+                       << "::stop(const viam::sdk::ProtoStruct & extra)\n{\n"
+                       << R"--(    throw std::logic_error("\"stop\" not implemented");)--"
+                       << "\n}\n\n";
             }
         }
     };
@@ -272,6 +289,7 @@ void Generator::do_stubs() {
     MethodPrinter printer(*headerOut_, *srcOut_);
     MatchFinder finder;
 
+    finder.addMatcher(stoppableMatcher, &printer);
     finder.addMatcher(methodMatcher, &printer);
 
     if (int result = tool.run(clang::tooling::newFrontendActionFactory(&finder).get())) {
