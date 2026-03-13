@@ -125,9 +125,8 @@ namespace {1} {
 }
 
 )--";
-    *srcOut_ << llvm::formatv(ctorFmt, fmt_str::modelPascal, resourceSubtypePascal_);
-
-    llvm::formatv(R"--(
+    *srcOut_ << llvm::formatv(ctorFmt, fmt_str::modelPascal, resourceSubtypePascal_)
+             << llvm::formatv(R"--(
 std::vector<std::string> {0}::validate(const viam::sdk::ResourceConfig& cfg) {{
     throw std::runtime_error("\"validate\" not implemented");
 }
@@ -137,7 +136,7 @@ void {0}::reconfigure(const viam::sdk::Dependencies& deps, const viam::sdk::Reso
 }
 
 )--",
-                  fmt_str::modelPascal);
+                              fmt_str::modelPascal);
 }
 
 template <>
