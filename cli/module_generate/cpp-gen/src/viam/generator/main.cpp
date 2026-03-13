@@ -26,19 +26,34 @@ static llvm::cl::opt<std::string> outdir(
     llvm::cl::desc("Output directory; use '-' to print to stdout"),
     llvm::cl::cat(opts));
 
-static llvm::cl::opt<bool> justMain("main",
-                                    llvm::cl::desc("If true, output the stub main file and exit"),
-                                    llvm::cl::cat(quickExit));
+static llvm::cl::opt<bool> justMain(
+    "main",
+    llvm::cl::desc("If true, output the template main.cpp.in and exit"),
+    llvm::cl::cat(quickExit));
 
 static llvm::cl::opt<bool> justCMake(
     "cmake",
-    llvm::cl::desc("If true, output the template CMakeLists.txt and exit"),
+    llvm::cl::desc("If true, output the template CMakeLists.txt.in and exit"),
     llvm::cl::cat(quickExit));
 
 static llvm::cl::opt<bool> justConan(
     "conan",
-    llvm::cl::desc("If true, output the template conanfile and exit"),
+    llvm::cl::desc("If true, output the template conanfile.py.in and exit"),
     llvm::cl::cat(quickExit));
+
+static llvm::cl::extrahelp extra(R"--(
+OUTPUT DIRECTORY HELP:
+
+The directory option (-d) is used to automatically deduced output file names to be created
+in a directory prefix. Given -d generator/output/directory, the output file will be
+deduced from either the quick exit options, or the appropriate directory and filenames
+from the source file input. For example, /path/to/components/arm.cpp will generate an
+arm.hpp.in and arm.cpp.in in the output directory. This implies in particular that the
+output directory must already contain components/ and services/ subdirectories.
+
+If -d is not provided, or set to "-", stdout is used for all files.
+
+)--");
 
 int main(int argc, const char** argv) try {
     cl::ParseCommandLineOptions(argc, argv);
