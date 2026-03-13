@@ -284,7 +284,7 @@ void Generator::main_fn(llvm::raw_ostream& moduleFile) {
         &{1}::validate);
 )--",
                       fmt_str::resourceSubtypePascal,
-                      fmt_str::modelPascal)
+                      fmt_str::moduleName + llvm::Twine("::") + fmt_str::modelPascal)
                << "\n\n"
                <<
         R"--(
