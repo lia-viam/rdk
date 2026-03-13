@@ -415,7 +415,7 @@ class {0}Recipe(ConanFile):
         cmake.install()
 
     def requirements(self):
-        self.requires("viam-cpp-sdk/0.31.0")
+        self.requires("viam-cpp-sdk/0.32.0")
 )--",
                              fmt_str::moduleName);
 }
