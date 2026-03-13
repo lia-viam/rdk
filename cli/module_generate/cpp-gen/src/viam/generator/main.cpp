@@ -20,10 +20,11 @@ static cl::opt<std::string> SourcePath(cl::Positional,
                                        cl::Optional,
                                        cl::cat(opts));
 
-static llvm::cl::opt<std::string> outfile("o",
-                                          llvm::cl::init("-"),
-                                          llvm::cl::desc("Output file, default stdout"),
-                                          llvm::cl::cat(opts));
+static llvm::cl::opt<std::string> outdir(
+    "d",
+    llvm::cl::init("-"),
+    llvm::cl::desc("Output directory; use '-' to print to stdout"),
+    llvm::cl::cat(opts));
 
 static llvm::cl::opt<bool> justMain("main",
                                     llvm::cl::desc("If true, output the stub main file and exit"),
@@ -42,26 +43,37 @@ static llvm::cl::opt<bool> justConan(
 int main(int argc, const char** argv) try {
     cl::ParseCommandLineOptions(argc, argv);
 
-    std::error_code ec;
-    llvm::raw_fd_ostream out(outfile, ec, llvm::sys::fs::CD_CreateAlways);
+    auto make_out = [&](llvm::StringRef filename) -> std::unique_ptr<llvm::raw_fd_ostream> {
+        std::string path = outdir;
 
-    if (ec != std::error_code{}) {
-        llvm::errs() << "Error " << ec.message() << " opening file " << outfile << "\n";
-        return 1;
-    }
+        if (path != "-") {
+            path += "/" + filename.str();
+        }
+
+        std::error_code ec;
+
+        auto os = std::make_unique<llvm::raw_fd_ostream>(path, ec, llvm::sys::fs::CD_CreateAlways);
+        if (ec != std::error_code{}) {
+            throw std::runtime_error("Error " + ec.message() + " opening file " + path);
+        }
+        return os;
+    };
 
     if (justMain) {
-        Generator::main_fn(out);
+        auto os = make_out("main.cpp.in");
+        Generator::main_fn(*os);
         return 0;
     }
 
     if (justCMake) {
-        Generator::cmakelists(out);
+        auto os = make_out("CMakeLists.txt.in");
+        Generator::cmakelists(*os);
         return 0;
     }
 
     if (justConan) {
-        Generator::conanfile(out);
+        auto os = make_out("conanfile.py.in");
+        Generator::conanfile(*os);
         return 0;
     }
 
@@ -77,6 +89,25 @@ int main(int argc, const char** argv) try {
         return 1;
     }
 
+    // Validate source path has a terminal .cpp file and a parent directory component
+    // (e.g. components/arm.cpp or services/motion.cpp)
+    {
+        const std::string& src = SourcePath.getValue();
+        auto it = llvm::sys::path::rbegin(src);
+        const auto rend = llvm::sys::path::rend(src);
+        if (it == rend || !llvm::StringRef(*it).endswith(".cpp")) {
+            llvm::errs() << "Source path must end in a .cpp file "
+                            "(e.g. components/arm.cpp)\n";
+            return 1;
+        }
+        ++it;
+        if (it == rend) {
+            llvm::errs() << "Source path must include a parent directory component "
+                            "(e.g. components/arm.cpp)\n";
+            return 1;
+        }
+    }
+
     std::string err;
     auto compilations =
         clang::tooling::CompilationDatabase::autoDetectFromDirectory(BuildPath, err);
@@ -86,9 +117,24 @@ int main(int argc, const char** argv) try {
         return 1;
     }
 
-    auto gen = Generator::createFromCommandLine(*compilations, SourcePath, out);
+    // Build an output stream whose filename is derived from the trailing two
+    // components of SourcePath (e.g. components/arm) with the given extension
+    // and a .in suffix (e.g. outdir/components/arm.hpp.in).
+    auto make_gen_out = [&](llvm::StringRef ext) -> std::unique_ptr<llvm::raw_fd_ostream> {
+        const std::string& src = SourcePath.getValue();
+        auto it = llvm::sys::path::rbegin(src);
+        llvm::StringRef stem = llvm::sys::path::stem(*it);
+        ++it;
+        llvm::StringRef parentDir = *it;
+        return make_out((llvm::Twine(parentDir) + "/" + stem + "." + ext + ".in").str());
+    };
 
-    return gen.run();
+    auto headerOut = make_gen_out("hpp");
+    auto srcOut = make_gen_out("cpp");
+    auto gen = Generator::createFromCommandLine(
+        *compilations, SourcePath, std::move(headerOut), std::move(srcOut));
+
+    return gen.do_header();
 } catch (const std::exception& e) {
     std::cerr << "Generator failed with exception: " << e.what() << "\n";
     return 1;

@@ -6,6 +6,8 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include <memory>
+
 namespace viam::gen {
 
 class Generator {
@@ -24,11 +26,13 @@ class Generator {
 
     static Generator create(ModuleInfo moduleInfo,
                             CppTreeInfo cppInfo,
-                            llvm::raw_ostream& moduleFile);
+                            std::unique_ptr<llvm::raw_fd_ostream> headerOut,
+                            std::unique_ptr<llvm::raw_fd_ostream> srcOut);
 
     static Generator createFromCommandLine(const clang::tooling::CompilationDatabase& db,
                                            llvm::StringRef sourceFile,
-                                           llvm::raw_ostream& outFile);
+                                           std::unique_ptr<llvm::raw_fd_ostream> headerOut,
+                                           std::unique_ptr<llvm::raw_fd_ostream> srcOut);
 
     static ResourceType to_resource_type(llvm::StringRef resourceType);
 
@@ -38,7 +42,9 @@ class Generator {
 
     static void conanfile(llvm::raw_ostream& outFile);
 
-    int run();
+    int do_header();
+
+    int do_src();
 
    private:
     template <ResourceType>
@@ -51,7 +57,8 @@ class Generator {
               ResourceType resourceType,
               std::string resourceSubtypeSnake,
               std::string resourcePath,
-              llvm::raw_ostream& moduleFile);
+              std::unique_ptr<llvm::raw_fd_ostream> headerOut,
+              std::unique_ptr<llvm::raw_fd_ostream> srcOut);
 
     enum SrcType { cpp, hpp };
 
@@ -68,7 +75,8 @@ class Generator {
 
     std::string resourcePath_;
 
-    llvm::raw_ostream& moduleFile_;
+    std::unique_ptr<llvm::raw_fd_ostream> headerOut_;
+    std::unique_ptr<llvm::raw_fd_ostream> srcOut_;
 };
 
 }  // namespace viam::gen

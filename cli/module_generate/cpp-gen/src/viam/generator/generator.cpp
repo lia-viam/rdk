@@ -24,7 +24,8 @@ namespace viam::gen {
 
 Generator Generator::create(Generator::ModuleInfo moduleInfo,
                             Generator::CppTreeInfo cppInfo,
-                            llvm::raw_ostream& moduleFile) {
+                            std::unique_ptr<llvm::raw_fd_ostream> headerOut,
+                            std::unique_ptr<llvm::raw_fd_ostream> srcOut) {
     std::string error;
     auto jsonDb =
         clang::tooling::JSONCompilationDatabase::autoDetectFromDirectory(cppInfo.buildDir, error);
@@ -39,17 +40,20 @@ Generator Generator::create(Generator::ModuleInfo moduleInfo,
         (cppInfo.sourceDir +
          resourceToSource(moduleInfo.resourceSubtypeSnake, moduleInfo.resourceType, SrcType::cpp))
             .str(),
-        moduleFile);
+        std::move(headerOut),
+        std::move(srcOut));
 }
 
 Generator Generator::createFromCommandLine(const clang::tooling::CompilationDatabase& db,
                                            llvm::StringRef sourceFile,
-                                           llvm::raw_ostream& outFile) {
+                                           std::unique_ptr<llvm::raw_fd_ostream> headerOut,
+                                           std::unique_ptr<llvm::raw_fd_ostream> srcOut) {
     return Generator(GeneratorCompDB(db, getCompilersDefaultIncludeDir(db, true)),
                      to_resource_type((*++llvm::sys::path::rbegin(sourceFile)).drop_back()),
                      llvm::sys::path::stem(sourceFile).str(),
                      sourceFile.str(),
-                     outFile);
+                     std::move(headerOut),
+                     std::move(srcOut));
 }
 
 Generator::ResourceType Generator::to_resource_type(llvm::StringRef resourceType) {
@@ -68,22 +72,24 @@ Generator::Generator(GeneratorCompDB db,
                      ResourceType resourceType,
                      std::string resourceSubtypeSnake,
                      std::string resourcePath,
-                     llvm::raw_ostream& moduleFile)
+                     std::unique_ptr<llvm::raw_fd_ostream> headerOut,
+                     std::unique_ptr<llvm::raw_fd_ostream> srcOut)
     : db_(std::move(db)),
       resourceType_(resourceType),
       resourceSubtypeSnake_(std::move(resourceSubtypeSnake)),
       resourceSubtypePascal_(llvm::convertToCamelFromSnakeCase(resourceSubtypeSnake_, true)),
       resourcePath_(std::move(resourcePath)),
-      moduleFile_(moduleFile) {
+      headerOut_(std::move(headerOut)),
+      srcOut_(std::move(srcOut)) {
     if (llvm::StringRef(resourceSubtypeSnake_).startswith("generic_")) {
         resourceSubtypeSnake_ = "generic";
     }
 }
 
-int Generator::run() {
+int Generator::do_header() {
     include_stmts();
 
-    moduleFile_ << llvm::formatv("namespace {0} {\n\n", fmt_str::moduleName);
+    *headerOut_ << llvm::formatv("namespace {0} {\n\n", fmt_str::moduleName);
 
     const char* fmt =
         R"--(
@@ -95,9 +101,9 @@ public:
 
 )--";
 
-    moduleFile_ << llvm::formatv(fmt, fmt_str::modelPascal, resourceSubtypePascal_);
+    *headerOut_ << llvm::formatv(fmt, fmt_str::modelPascal, resourceSubtypePascal_);
 
-    moduleFile_ << R"--(
+    *headerOut_ << R"--(
     static std::vector<std::string> validate(const viam::sdk::ResourceConfig&)
     {
         throw std::runtime_error("\"validate\" not implemented");
@@ -116,9 +122,9 @@ public:
         throw std::runtime_error("Nonzero return from stub generation");
     }
 
-    moduleFile_ << "};\n\n";
+    *headerOut_ << "};\n\n";
 
-    moduleFile_ << llvm::formatv("} // namespace {0} \n", fmt_str::moduleName);
+    *headerOut_ << llvm::formatv("} // namespace {0} \n", fmt_str::moduleName);
 
     return 0;
 }
@@ -156,7 +162,7 @@ void Generator::include_stmts() {
                           ? include_fmt<ResourceType::component>()
                           : include_fmt<ResourceType::service>();
 
-    moduleFile_ << llvm::formatv(
+    *headerOut_ << llvm::formatv(
         fmt, resourceToSource(resourceSubtypeSnake_, resourceType_, SrcType::hpp));
 }
 
@@ -233,7 +239,7 @@ int Generator::do_stubs() {
         }
     };
 
-    MethodPrinter printer(moduleFile_);
+    MethodPrinter printer(*headerOut_);
     MatchFinder finder;
 
     finder.addMatcher(methodMatcher, &printer);
