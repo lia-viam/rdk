@@ -83,6 +83,8 @@ Generator::Generator(GeneratorCompDB db,
 int Generator::run() {
     include_stmts();
 
+    moduleFile_ << llvm::formatv("namespace {0} {\n\n", fmt_str::moduleName);
+
     const char* fmt =
         R"--(
 class {0} : public viam::sdk::{1}, public viam::sdk::Reconfigurable {{
@@ -116,6 +118,8 @@ public:
 
     moduleFile_ << "};\n\n";
 
+    moduleFile_ << llvm::formatv("} // namespace {0} \n", fmt_str::moduleName);
+
     return 0;
 }
 
@@ -128,7 +132,7 @@ const char* Generator::include_fmt<Generator::ResourceType::component>() {
 #include <viam/sdk/module/service.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
 
-    )--";
+)--";
 
     return fmt;
 }
@@ -141,7 +145,8 @@ const char* Generator::include_fmt<Generator::ResourceType::service>() {
 #include <viam/sdk/module/service.hpp>
 #include <viam/sdk/resource/reconfigurable.hpp>
 #include <viam/sdk/{0}>
-    )--";
+
+)--";
 
     return fmt;
 }
