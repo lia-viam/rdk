@@ -42,16 +42,18 @@ class Generator {
 
     static void conanfile(llvm::raw_ostream& outFile);
 
-    int do_header();
-
-    int do_src();
+    void run();
 
    private:
     template <ResourceType>
     const char* include_fmt();
 
+    void header_prefix();
+
+    void src_prefix();
+
     void include_stmts();
-    int do_stubs();
+    void do_stubs();
 
     Generator(GeneratorCompDB db,
               ResourceType resourceType,

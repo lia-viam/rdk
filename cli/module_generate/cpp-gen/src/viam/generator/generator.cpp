@@ -86,7 +86,7 @@ Generator::Generator(GeneratorCompDB db,
     }
 }
 
-int Generator::do_header() {
+void Generator::header_prefix() {
     include_stmts();
 
     *headerOut_ << llvm::formatv("namespace {0} {\n\n", fmt_str::moduleName);
@@ -95,38 +95,49 @@ int Generator::do_header() {
         R"--(
 class {0} : public viam::sdk::{1}, public viam::sdk::Reconfigurable {{
 public:
-    {0}(const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg) : {1}(cfg.name()) {{
-        this->reconfigure(deps, cfg);
-    }
+    {0}(const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg);
+
+    static std::vector<std::string> validate(const viam::sdk::ResourceConfig& cfg);
+
+    void reconfigure(const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg) override;
 
 )--";
 
     *headerOut_ << llvm::formatv(fmt, fmt_str::modelPascal, resourceSubtypePascal_);
+}
 
-    *headerOut_ << R"--(
-    static std::vector<std::string> validate(const viam::sdk::ResourceConfig&)
-    {
-        throw std::runtime_error("\"validate\" not implemented");
-    }
+void Generator::src_prefix() {
+    *srcOut_ << llvm::formatv(R"--(
+#include "{0}.hpp"
 
-    void reconfigure(const viam::sdk::Dependencies&, const viam::sdk::ResourceConfig&) override
-    {
-        throw std::runtime_error("\"reconfigure\" not implemented");
-    }
+#include <stdexcept>
+
+namespace {1} {
+
+)--",
+                              fmt_str::modelSnake,
+                              fmt_str::moduleName);
+
+    const char* ctorFmt = R"--(
+{0}::{0}(const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
+    : {1}(cfg.name()) {
+    this->reconfigure(deps, cfg);
+}
 
 )--";
+    *srcOut_ << llvm::formatv(ctorFmt, fmt_str::modelPascal, resourceSubtypePascal_);
 
-    int result = do_stubs();
+    llvm::formatv(R"--(
+std::vector<std::string> {0}::validate(const viam::sdk::ResourceConfig& cfg) {
+    throw std::runtime_error("\"validate\" not implemented");
+}
 
-    if (result != 0) {
-        throw std::runtime_error("Nonzero return from stub generation");
-    }
+void {0}::reconfigure(const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg) {
+    throw std::runtime_error("\"reconfigure\" not implemented");
+}
 
-    *headerOut_ << "};\n\n";
-
-    *headerOut_ << llvm::formatv("} // namespace {0} \n", fmt_str::moduleName);
-
-    return 0;
+)--",
+                  fmt_str::modelPascal);
 }
 
 template <>
@@ -158,6 +169,8 @@ const char* Generator::include_fmt<Generator::ResourceType::service>() {
 }
 
 void Generator::include_stmts() {
+    *headerOut_ << "#pragma once\n\n";
+
     const char* fmt = (resourceType_ == ResourceType::component)
                           ? include_fmt<ResourceType::component>()
                           : include_fmt<ResourceType::service>();
@@ -166,7 +179,7 @@ void Generator::include_stmts() {
         fmt, resourceToSource(resourceSubtypeSnake_, resourceType_, SrcType::hpp));
 }
 
-int Generator::do_stubs() {
+void Generator::do_stubs() {
     clang::tooling::ClangTool tool(db_, resourcePath_);
 
     using namespace clang::ast_matchers;
@@ -177,14 +190,70 @@ int Generator::do_stubs() {
         cxxMethodDecl(isPure(), hasParent(cxxRecordDecl(hasName(qualName)))).bind("method");
 
     struct MethodPrinter : MatchFinder::MatchCallback {
-        MethodPrinter(llvm::raw_ostream& os_) : os(os_) {}
+        MethodPrinter(llvm::raw_ostream& headerOut_, llvm::raw_ostream& srcOut_)
+            : headerOut(headerOut_), srcOut(srcOut_) {}
 
-        llvm::raw_ostream& os;
+        llvm::raw_ostream& headerOut;
+        llvm::raw_ostream& srcOut;
 
-        void printParm(const clang::ParmVarDecl& parm) {
+        void printParm(llvm::raw_ostream& os, const clang::ParmVarDecl& parm) {
             os << clang::TypeName::getFullyQualifiedName(
                       parm.getType(), parm.getASTContext(), {parm.getASTContext().getLangOpts()})
                << " " << parm.getName();
+        }
+
+        void printParams(llvm::raw_ostream& os, const clang::CXXMethodDecl* method) {
+            const auto paramCount = method->getNumParams();
+
+            auto printParamBreak = [paramCount, &os] {
+                if (paramCount > 1) {
+                    os << "\n        ";
+                }
+            };
+
+            if (paramCount > 0) {
+                auto param_begin = method->param_begin();
+
+                printParamBreak();
+                printParm(os, **param_begin);
+
+                if (paramCount > 1) {
+                    for (const clang::ParmVarDecl* parm :
+                         llvm::makeArrayRef(++param_begin, method->param_end())) {
+                        os << ",";
+                        printParamBreak();
+                        printParm(os, *parm);
+                    }
+                }
+            }
+        }
+
+        void do_header_declaration(const clang::CXXMethodDecl* method,
+                                   const clang::PrintingPolicy& printPolicy,
+                                   const std::string& retType) {
+            headerOut << "    " << retType << (retType.size() < 70 ? " " : "\n    ")
+                      << method->getName() << "(";
+            printParams(headerOut, method);
+            headerOut << ")";
+            method->getMethodQualifiers().print(headerOut, printPolicy, false);
+            headerOut << " override;\n\n";
+        }
+
+        void do_src_definition(const clang::CXXMethodDecl* method,
+                               const clang::PrintingPolicy& printPolicy,
+                               const std::string& retType) {
+            srcOut << retType << (retType.size() < 70 ? " " : "\n") << fmt_str::modelPascal
+                   << "::" << method->getName() << "(";
+            printParams(srcOut, method);
+            srcOut << ")";
+            method->getMethodQualifiers().print(srcOut, printPolicy, false);
+            srcOut << llvm::formatv(R"--(
+{
+    throw std::logic_error("\"{0}\" not implemented");
+}
+
+)--",
+                                    method->getName());
         }
 
         void run(const MatchFinder::MatchResult& result) override {
@@ -195,56 +264,20 @@ int Generator::do_stubs() {
                 const std::string& retType = clang::TypeName::getFullyQualifiedName(
                     method->getReturnType(), method->getASTContext(), printPolicy);
 
-                os << "    " << retType << (retType.size() < 70 ? " " : "\n    ")
-                   << method->getName() << "(";
-
-                const auto paramCount = method->getNumParams();
-
-                auto printParamBreak = [paramCount, this] {
-                    if (paramCount > 1) {
-                        os << "\n        ";
-                    }
-                };
-
-                if (paramCount > 0) {
-                    auto param_begin = method->param_begin();
-
-                    printParamBreak();
-                    printParm(**param_begin);
-
-                    if (paramCount > 1) {
-                        for (const clang::ParmVarDecl* parm :
-                             llvm::makeArrayRef(++param_begin, method->param_end())) {
-                            os << ",";
-                            printParamBreak();
-                            printParm(*parm);
-                        }
-                    }
-                }
-
-                os << ")";
-
-                method->getMethodQualifiers().print(os, printPolicy, false);
-
-                os << " override";
-
-                os << llvm::formatv(R"--(
-    {
-        throw std::logic_error("\"{0}\" not implemented");
-    }
-
-)--",
-                                    method->getName());
+                do_header_declaration(method, printPolicy, retType);
+                do_src_definition(method, printPolicy, retType);
             }
         }
     };
 
-    MethodPrinter printer(*headerOut_);
+    MethodPrinter printer(*headerOut_, *srcOut_);
     MatchFinder finder;
 
     finder.addMatcher(methodMatcher, &printer);
 
-    return tool.run(clang::tooling::newFrontendActionFactory(&finder).get());
+    if (int result = tool.run(clang::tooling::newFrontendActionFactory(&finder).get())) {
+        throw std::runtime_error("Nonzero return from stub generation: " + std::to_string(result));
+    }
 }
 
 void Generator::main_fn(llvm::raw_ostream& moduleFile) {
@@ -385,6 +418,20 @@ class {0}Recipe(ConanFile):
         self.requires("viam-cpp-sdk/0.31.0")
 )--",
                              fmt_str::moduleName);
+}
+
+void Generator::run() {
+    header_prefix();
+    src_prefix();
+
+    do_stubs();
+
+    *headerOut_ << "};\n\n";
+
+    const auto close_ns = llvm::formatv("} // namespace {0}\n\n", fmt_str::moduleName);
+
+    *headerOut_ << close_ns;
+    *srcOut_ << close_ns;
 }
 
 std::string Generator::resourceToSource(llvm::StringRef resourceSubtype,

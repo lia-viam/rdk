@@ -149,7 +149,9 @@ int main(int argc, const char** argv) try {
     auto gen = Generator::createFromCommandLine(
         *compilations, SourcePath, std::move(headerOut), std::move(srcOut));
 
-    return gen.do_header();
+    gen.run();
+
+    return 0;
 } catch (const std::exception& e) {
     std::cerr << "Generator failed with exception: " << e.what() << "\n";
     return 1;
