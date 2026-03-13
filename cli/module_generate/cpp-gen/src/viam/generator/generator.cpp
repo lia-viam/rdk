@@ -355,11 +355,11 @@ find_package(Threads REQUIRED)
 find_package(viam-cpp-sdk CONFIG REQUIRED COMPONENTS viamsdk)
 
 add_executable({0}
-    src/main.cpp
+    main.cpp
     src/{1}.cpp
 )
 
-target_include_directories({0} src)
+target_include_directories({0} PUBLIC src)
 
 target_link_libraries({0}
     viam-cpp-sdk::viamsdk
